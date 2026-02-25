@@ -1,0 +1,396 @@
+/* ═══════════════════════════════════════════════════════════════
+   DocChat AI — Global Design System
+   Font loaded via layout.js <link> (not here, avoids Turbopack error)
+═══════════════════════════════════════════════════════════════ */
+
+
+/* ── Design Tokens ─────────────────────────────────────────── */
+:root {
+  /* Colors */
+  --c-bg: #080810;
+  --c-surface: #0f0f1a;
+  --c-surface-2: #16162a;
+  --c-border: rgba(139, 92, 246, 0.12);
+  --c-border-soft: rgba(255, 255, 255, 0.06);
+  --c-text: #e8e8f0;
+  --c-text-muted: rgba(232, 232, 240, 0.45);
+  --c-text-faint: rgba(232, 232, 240, 0.2);
+
+  /* Accent — violet/indigo */
+  --c-accent: #7c3aed;
+  --c-accent-2: #4f46e5;
+  --c-accent-glow: rgba(124, 58, 237, 0.35);
+  --c-accent-soft: rgba(124, 58, 237, 0.12);
+
+  /* Gradients */
+  --g-accent: linear-gradient(135deg, #7c3aed 0%, #4f46e5 50%, #2563eb 100%);
+  --g-text: linear-gradient(90deg, #a78bfa, #818cf8, #67e8f9, #818cf8, #a78bfa);
+
+  /* Typography */
+  --font-display: 'Syne', sans-serif;
+  --font-body: 'DM Sans', 'Segoe UI', sans-serif;
+
+  /* Spacing */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+  --radius-xl: 24px;
+  --radius-full: 999px;
+}
+
+/* ── Reset & Base ──────────────────────────────────────────── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--c-bg);
+  color: var(--c-text);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+/* ── Scrollbar ─────────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(to bottom, #7c3aed66, #4f46e566);
+  border-radius: 99px;
+}
+
+/* ── Keyframes ─────────────────────────────────────────────── */
+@keyframes wave {
+
+  0%,
+  60%,
+  100% {
+    transform: rotate(0deg);
+  }
+
+  10% {
+    transform: rotate(18deg);
+  }
+
+  20% {
+    transform: rotate(-8deg);
+  }
+
+  30% {
+    transform: rotate(18deg);
+  }
+
+  40% {
+    transform: rotate(-4deg);
+  }
+
+  50% {
+    transform: rotate(12deg);
+  }
+}
+
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% center;
+  }
+
+  100% {
+    background-position: 200% center;
+  }
+}
+
+@keyframes orbDrift {
+  0% {
+    transform: translate(0, 0) scale(1);
+  }
+
+  33% {
+    transform: translate(40px, -30px) scale(1.06);
+  }
+
+  66% {
+    transform: translate(-25px, 20px) scale(0.96);
+  }
+
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+}
+
+@keyframes pulse-ring {
+  0% {
+    transform: scale(1);
+    opacity: 0.6;
+  }
+
+  100% {
+    transform: scale(1.8);
+    opacity: 0;
+  }
+}
+
+@keyframes blink {
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ── Utility — Animations ──────────────────────────────────── */
+.wave-hand {
+  display: inline-block;
+  transform-origin: 70% 70%;
+  animation: wave 2.4s ease-in-out infinite;
+}
+
+.fade-up {
+  animation: fadeUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.fade-up-1 {
+  animation-delay: 0.06s;
+}
+
+.fade-up-2 {
+  animation-delay: 0.13s;
+}
+
+.fade-up-3 {
+  animation-delay: 0.20s;
+}
+
+.fade-up-4 {
+  animation-delay: 0.28s;
+}
+
+.fade-up-5 {
+  animation-delay: 0.36s;
+}
+
+.fade-up-6 {
+  animation-delay: 0.44s;
+}
+
+/* ── Utility — Text ────────────────────────────────────────── */
+.shimmer-text {
+  background: var(--g-text);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shimmer 5s linear infinite;
+}
+
+.text-display {
+  font-family: var(--font-display);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+}
+
+/* ── Utility — Surfaces ────────────────────────────────────── */
+.glass {
+  background: rgba(15, 15, 26, 0.7);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid var(--c-border);
+}
+
+.surface {
+  background: var(--c-surface);
+  border: 1px solid var(--c-border-soft);
+}
+
+.orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(90px);
+  pointer-events: none;
+  animation: orbDrift 14s ease-in-out infinite;
+}
+
+/* ── Utility — Buttons ─────────────────────────────────────── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: none;
+  cursor: pointer;
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 14px;
+  border-radius: var(--radius-md);
+  transition: all 0.18s ease;
+  text-decoration: none;
+  white-space: nowrap;
+  line-height: 1;
+}
+
+.btn-primary {
+  background: var(--g-accent);
+  color: #fff;
+  padding: 12px 24px;
+  box-shadow: 0 4px 24px var(--c-accent-glow);
+}
+
+.btn-primary:hover {
+  opacity: 0.88;
+  transform: translateY(-1px);
+  box-shadow: 0 8px 32px var(--c-accent-glow);
+}
+
+.btn-primary:active {
+  transform: translateY(0);
+}
+
+.btn-ghost {
+  background: var(--c-border-soft);
+  color: rgba(232, 232, 240, 0.7);
+  border: 1px solid var(--c-border-soft);
+  padding: 12px 24px;
+}
+
+.btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.09);
+  color: var(--c-text);
+  border-color: var(--c-border);
+}
+
+.btn-sm {
+  font-size: 13px;
+  padding: 8px 16px;
+  border-radius: var(--radius-sm);
+}
+
+.btn-icon {
+  padding: 9px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--c-text-muted);
+  transition: all 0.15s;
+}
+
+.btn-icon:hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--c-text);
+}
+
+/* ── Utility — Inputs ──────────────────────────────────────── */
+.input {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--c-border-soft);
+  border-radius: var(--radius-md);
+  padding: 13px 16px;
+  color: var(--c-text);
+  font-family: var(--font-body);
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.input::placeholder {
+  color: var(--c-text-faint);
+}
+
+.input:focus {
+  border-color: rgba(124, 58, 237, 0.5);
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.12);
+}
+
+/* ── Utility — Badge ───────────────────────────────────────── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 14px;
+  border-radius: var(--radius-full);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  background: var(--c-accent-soft);
+  border: 1px solid rgba(124, 58, 237, 0.22);
+  color: #c4b5fd;
+}
+
+.badge-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #a78bfa;
+  box-shadow: 0 0 8px #a78bfa;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.badge-dot::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: #a78bfa;
+  animation: pulse-ring 1.8s ease-out infinite;
+}
+
+/* ── Scrollbar hide for textarea ───────────────────────────── */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}

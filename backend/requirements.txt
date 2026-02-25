@@ -1,0 +1,37 @@
+# Core FastAPI
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+python-multipart==0.0.22
+
+# Data Validation
+pydantic==2.12.5
+pydantic-settings==2.8.0
+
+# Environment Management
+python-dotenv==1.2.1
+
+# AI/ML
+google-genai==1.64.0
+openai==1.64.0
+groq==0.14.0
+
+# Vector Database
+pinecone==8.1.0
+
+# Document Processing
+pypdf2==3.0.1
+python-docx==1.2.0
+
+# Authentication
+python-jose[cryptography]==3.5.0
+httpx==0.28.1
+
+# LangSmith (Tracing)
+langsmith==0.7.5
+langchain==1.2.10
+
+# Async HTTP Client
+httpx==0.28.1
+
+# Development
+pytest==9.0.2
