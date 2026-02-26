@@ -61,7 +61,7 @@ export default function Signup() {
                     <Link href="/" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none", marginBottom: 28 }}>
                         
                     </Link>
-                    <h1 style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 30, color: "var(--c-text)", letterSpacing: "-0.025em", marginBottom: 8 }}>
+                    <h1 style={{ fontFamily: "Roboto", fontWeight: 700, fontSize: 30, color: "var(--c-text)", letterSpacing: "-0.025em", marginBottom: 8 }}>
                         Create your account
                     </h1>
                     <p style={{ color: "var(--c-text-muted)", fontSize: 14 }}>Start chatting with your documents</p>

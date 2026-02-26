@@ -12,6 +12,7 @@ import { useState, useRef, useEffect } from "react";
  */
 export function VoiceInput({
     onTranscript,
+    onSpeechEnd,
     onError,
     autoSend = false,
     showLanguage = true
@@ -23,6 +24,7 @@ export function VoiceInput({
     const recognitionRef = useRef(null);
     const mediaRecorderRef = useRef(null);
     const chunksRef = useRef([]);
+    const silenceTimerRef = useRef(null);
 
     // Check browser support on mount
     useEffect(() => {
@@ -42,7 +44,7 @@ export function VoiceInput({
         const recognition = new SpeechRecognition();
 
         // Configure for best results
-        recognition.continuous = false;
+        recognition.continuous = true;
         recognition.interimResults = true;
         recognition.maxAlternatives = 1;
 
@@ -54,6 +56,7 @@ export function VoiceInput({
             setIsListening(true);
             setTranscript("");
             setDetectedLanguage("");
+            if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
         };
 
         recognition.onresult = (event) => {
@@ -62,7 +65,6 @@ export function VoiceInput({
 
             for (let i = event.resultIndex; i < event.results.length; i++) {
                 const transcriptText = event.results[i][0].transcript;
-
                 if (event.results[i].isFinal) {
                     finalTranscript += transcriptText + " ";
                 } else {
@@ -70,29 +72,25 @@ export function VoiceInput({
                 }
             }
 
-            // Show real-time transcription
             const currentTranscript = finalTranscript || interimTranscript;
             setTranscript(currentTranscript);
 
-            // Detect language when we have final transcript
             if (finalTranscript) {
                 const lang = detectLanguage(finalTranscript);
                 setDetectedLanguage(lang);
-
-                // Send transcript to parent
                 onTranscript(finalTranscript.trim(), lang);
-
-                // Auto-send if enabled
-                if (autoSend) {
-                    // Small delay to show the transcript
-                    setTimeout(() => {
-                        const event = new CustomEvent('voice-auto-send', {
-                            detail: { text: finalTranscript.trim(), language: lang }
-                        });
-                        window.dispatchEvent(event);
-                    }, 300);
-                }
             }
+
+            // ✅ ADD THIS NEW BLOCK: The Silence Detection Timer
+            // Clear the existing timer because you are still speaking
+            if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+
+            // Set a new timer. If 2000ms (2 seconds) passes without you speaking, stop the mic.
+            silenceTimerRef.current = setTimeout(() => {
+                if (recognitionRef.current) {
+                    recognitionRef.current.stop(); // This triggers onend, which submits the message!
+                }
+            }, 2000); // <-- You can change this to 1500 for 1.5 seconds, etc.
         };
 
         recognition.onerror = (event) => {
@@ -108,9 +106,18 @@ export function VoiceInput({
             }
         };
 
+        // Inside your VoiceInput component file:
+
         recognition.onend = () => {
-            console.log("Voice recognition ended");
             setIsListening(false);
+            if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+            // We use setTimeout to ensure React state finishes updating first
+            setTimeout(() => {
+                // Notice we removed "props." here!
+                if (onSpeechEnd) {
+                    onSpeechEnd();
+                }
+            }, 100);
         };
 
         recognitionRef.current = recognition;
@@ -168,6 +175,12 @@ export function VoiceInput({
                             window.dispatchEvent(event);
                         }, 300);
                     }
+
+                    // ✅ ADD THIS: Trigger submission after backend transcription finishes
+                    if (onSpeechEnd) {
+                        onSpeechEnd();
+                    }
+
                 } catch (error) {
                     console.error("Transcription error:", error);
                     onError?.("Failed to transcribe audio. Please try again.");
@@ -278,7 +291,7 @@ export function VoiceInput({
             </button>
 
             {/* Real-time transcript display */}
-            {transcript && (
+            {/* {transcript && (
                 <div style={{
                     padding: "6px 12px",
                     borderRadius: 8,
@@ -294,6 +307,7 @@ export function VoiceInput({
                     {transcript}
                 </div>
             )}
+            */}
 
             {/* Language indicator */}
             {showLanguage && detectedLanguage && (
@@ -328,7 +342,8 @@ export function VoiceInput({
 }
 
 // Compact version (just the button)
-export function CompactVoiceInput({ onTranscript, autoSend = false }) {
+// Compact version (just the button)
+export function CompactVoiceInput({ onTranscript, onSpeechEnd, autoSend = false }) { // ✅ Add prop here
     const [isListening, setIsListening] = useState(false);
 
     const handleTranscript = (text, language) => {
@@ -338,6 +353,7 @@ export function CompactVoiceInput({ onTranscript, autoSend = false }) {
     return (
         <VoiceInput
             onTranscript={handleTranscript}
+            onSpeechEnd={onSpeechEnd} // ✅ Pass prop down
             autoSend={autoSend}
             showLanguage={false}
             onError={(err) => console.error(err)}

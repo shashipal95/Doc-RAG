@@ -31,10 +31,10 @@ export default function Navbar() {
                         flexShrink: 0,
                     }}>✦</div>
                     <span style={{
-                        fontFamily: "'Syne', sans-serif",
+                        fontFamily: "'Roboto",
                         fontWeight: 700, fontSize: 18,
                         letterSpacing: "-0.02em", color: "#e8e8f0",
-                    }}>DocChat</span>
+                    }}>DocsChat</span>
                 </Link>
 
                 {/* Actions */}

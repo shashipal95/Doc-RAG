@@ -61,7 +61,7 @@ export default function Login() {
                     <Link href="/" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none", marginBottom: 28 }}>
                         
                     </Link>
-                    <h1 style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 30, color: "var(--c-text)", letterSpacing: "-0.025em", marginBottom: 8 }}>
+                    <h1 style={{ fontFamily: "Roboto", fontWeight: 700, fontSize: 30, color: "var(--c-text)", letterSpacing: "-0.025em", marginBottom: 8 }}>
                         Welcome back
                     </h1>
                     <p style={{ color: "var(--c-text-muted)", fontSize: 14 }}>Sign in to your account</p>

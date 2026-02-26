@@ -137,97 +137,104 @@ const TH = {
   },
 };
 
-export default function ChatPage() {
-  const router = useRouter();
-  const [theme, setTheme] = useState("dark");
-  const th = TH[theme];
+  export default function ChatPage() {
+    const router = useRouter();
+    const [theme, setTheme] = useState("dark");
+    const th = TH[theme];
 
-  const [user, setUser] = useState(null);
-  const [sessions, setSessions] = useState([]);
-  const [currentSession, setCurrentSession] = useState(null);
-  const [messages, setMessages] = useState([]);
-  const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [uploadMsg, setUploadMsg] = useState("");
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [provider, setProvider] = useState("groq");
-  const [embeddingProvider, setEmbeddingProvider] = useState("gemini");
-  const [deletingDocs, setDeletingDocs] = useState(false);
+    const [user, setUser] = useState(null);
+    const [sessions, setSessions] = useState([]);
+    const [currentSession, setCurrentSession] = useState(null);
+    const [messages, setMessages] = useState([]);
+    const [input, setInput] = useState("");
+    const [loading, setLoading] = useState(false);
+    const [uploading, setUploading] = useState(false);
+    const [uploadMsg, setUploadMsg] = useState("");
+    const [sidebarOpen, setSidebarOpen] = useState(true);
+    const [provider, setProvider] = useState("groq");
+    const [embeddingProvider, setEmbeddingProvider] = useState("gemini");
+    const [deletingDocs, setDeletingDocs] = useState(false);
 
-  const messagesEndRef = useRef(null);
-  const fileInputRef = useRef(null);
-  const textareaRef = useRef(null);
-  const audioRef = useRef(null);
-  const hasGreetedRef = useRef(false);
+    const messagesEndRef = useRef(null);
+    const fileInputRef = useRef(null);
+    const textareaRef = useRef(null);
+    const audioRef = useRef(null);
+    const hasGreetedRef = useRef(false);
 
-  // ── Auth check on mount ───────────────────────────────────────────────────
-  useEffect(() => {
-    const init = async () => {
-      // ✅ Initialize Supabase session from stored tokens
-      initializeSupabaseSession();
+    // ✅ ADD THIS: Tracks the absolute latest input text
+    const latestInputRef = useRef(input);
+    useEffect(() => {
+      latestInputRef.current = input;
+    }, [input]);
 
-      // getValidToken auto-refreshes if expired
-      const token = await getValidToken();
-      if (!token) { router.push("/login"); return; }
+    // 1. Define startNewChat FIRST so useEffect can use it
+    const startNewChat = () => {
+      setCurrentSession(null);
+      setInput("");
+      hasGreetedRef.current = true;
 
-      // Get user from localStorage (set by signIn)
-      const stored = getCurrentUser();
-      if (stored) {
-        setUser({ id: stored.id, name: stored.name || stored.email?.split("@")[0], email: stored.email });
-      } else {
-        // Fallback: fetch from backend
-        try {
-          const res = await authFetch("/auth/me");
-          const data = await res.json();
-          setUser({ id: data.id, name: data.name || data.email?.split("@")[0], email: data.email });
-        } catch { router.push("/login"); return; }
+      setMessages([
+        { role: "assistant", content: "Hello 👋 How can I help you today?" }
+      ]);
+
+      if (textareaRef.current) textareaRef.current.style.height = "auto";
+
+      if (audioRef.current) {
+        audioRef.current.currentTime = 0;
+        audioRef.current.play().catch((err) => {
+          console.warn("Browser blocked audio autoplay. User needs to interact with the page first.", err);
+        });
       }
-
-      await loadSessions();
     };
-    init();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
+    // 2. Define loadSessions
+    const loadSessions = useCallback(async () => {
+      const { data, error } = await supabase.from("chat_sessions").select("*").order("created_at", { ascending: false });
+      if (!error) setSessions(data || []);
+    }, []);
 
+    // 3. Auth check on mount
+    useEffect(() => {
+      const init = async () => {
+        initializeSupabaseSession();
+        const token = await getValidToken();
+        if (!token) { router.push("/login"); return; }
 
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+        const stored = getCurrentUser();
+        if (stored) {
+          setUser({ id: stored.id, name: stored.name || stored.email?.split("@")[0], email: stored.email });
+        } else {
+          try {
+            const res = await authFetch("/auth/me");
+            const data = await res.json();
+            setUser({ id: data.id, name: data.name || data.email?.split("@")[0], email: data.email });
+          } catch { router.push("/login"); return; }
+        }
 
-  // ── Sessions (still using Supabase client for direct DB access) ───────────
-  const loadSessions = useCallback(async () => {
-    const { data, error } = await supabase.from("chat_sessions").select("*").order("created_at", { ascending: false });
-    if (!error) setSessions(data || []);
-  }, []);
+        await loadSessions();
+        startNewChat(); // Now this works because it's defined above!
+      };
+      init();
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
-  const deleteSession = async (id) => {
-    await supabase.from("chat_sessions").delete().eq("id", id);
-    if (currentSession === id) { setCurrentSession(null); hasGreetedRef.current = false; setMessages([]); }
-    loadSessions();
-  };
+    useEffect(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, [messages]);
 
-  const startNewChat = () => {
-    setCurrentSession(null);
-    setInput("");
+    const deleteSession = async (id) => {
+      await supabase.from("chat_sessions").delete().eq("id", id);
+      if (currentSession === id) { setCurrentSession(null); hasGreetedRef.current = false; setMessages([]); }
+      loadSessions();
+    };
 
-    // Reset greeting flag
-    hasGreetedRef.current = true;
+    const loadMessages = async (sessionId) => {
+      setCurrentSession(sessionId); hasGreetedRef.current = true;
+      const { data, error } = await supabase.from("chat_messages").select("*").eq("session_id", sessionId).order("created_at", { ascending: true });
+      if (!error) setMessages(data.map(m => ({ role: m.role, content: m.content })));
+    };
 
-    // Directly set greeting
-    setMessages([
-      { role: "assistant", content: "Hello 👋 How can I help you today?" }
-    ]);
-
-    if (textareaRef.current) textareaRef.current.style.height = "auto";
-  };
-
-  const loadMessages = async (sessionId) => {
-    setCurrentSession(sessionId); hasGreetedRef.current = true;
-    const { data, error } = await supabase.from("chat_messages").select("*").eq("session_id", sessionId).order("created_at", { ascending: true });
-    if (!error) setMessages(data.map(m => ({ role: m.role, content: m.content })));
-  };
+    // ... (Keep the rest of your functions like logout, handleFileUpload, sendMessage, and the return JSX exactly as they were)
 
   // ── Logout — calls backend signOut (revokes Supabase session) ─────────────
   const logout = async () => {
@@ -273,19 +280,23 @@ export default function ChatPage() {
   };
 
   // ── Send ──────────────────────────────────────────────────────────────────
-  const sendMessage = async (e) => {
-    e?.preventDefault();
-    if (!input.trim() || loading) return;
+    // ✅ Update the parameters to accept an optional textOverride
+    const sendMessage = async (e, textOverride = null) => {
+      e?.preventDefault();
 
-    const question = input.trim();
+      // ✅ Use the override if provided, otherwise fallback to input state
+      const currentText = textOverride !== null ? textOverride : input;
 
-    // ✅ Immediately clear input and resize for instant feedback
-    setInput("");
-    setTimeout(resizeTextarea, 0);
+      if (!currentText.trim() || loading) return;
 
-    // ✅ Show user message immediately (optimistic UI)
-    setMessages(prev => [...prev, { role: "user", content: question }]);
+      const question = currentText.trim();
 
+      // Immediately clear input and resize for instant feedback
+      setInput("");
+      setTimeout(resizeTextarea, 0);
+
+      // Show user message immediately (optimistic UI)
+      setMessages(prev => [...prev, { role: "user", content: question }]);
     // Now handle the rest
     setLoading(true);
     let activeSession = currentSession;
@@ -603,6 +614,12 @@ export default function ChatPage() {
               onTranscript={(text) => {
                 setInput(prev => prev + " " + text);
                 resizeTextarea();
+              }}
+              // ✅ ADD THIS BLOCK
+              onSpeechEnd={() => {
+                if (latestInputRef.current.trim()) {
+                  sendMessage(null, latestInputRef.current);
+                }
               }}
               onError={(err) => {
                 console.error("Voice error:", err);
