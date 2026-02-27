@@ -1,10 +1,10 @@
 # DocChat Backend - Production RAG API
 
-Production-ready FastAPI backend for a multi-provider RAG (Retrieval Augmented Generation) system with user authentication and document management.
+Production-ready FastAPI backend for a Multi-model RAG system that can understand text , images, pdf with user authentication, session management, retrive user conversion history and more.
 
 ## 🚀 Features
-
-- **Multi-Provider LLM Support**: Gemini, OpenAI, Groq, Ollama
+- **Multi-Model**: Text, Images, Pdf
+- **Multi-P LLM Support**: Gemini, OpenAI, Groq, Ollama
 - **User Authentication**: Supabase-based JWT authentication
 - **Document Processing**: PDF, DOCX, TXT file support
 - **Vector Storage**: Pinecone with user-isolated namespaces

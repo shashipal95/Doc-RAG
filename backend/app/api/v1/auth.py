@@ -27,22 +27,37 @@ def supa_headers(token: str = None) -> dict:
 async def supabase_post(path: str, body: dict, token: str = None) -> dict:
     """POST to Supabase Auth API"""
     url = f"{settings.SUPABASE_URL}{path}"
-    
+
     async with httpx.AsyncClient() as client:
-        resp = await client.post(url, headers=supa_headers(token), json=body)
-    
+        resp = await client.post(
+            url,
+            headers=supa_headers(token),
+            json=body
+        )
+
+    # Handle errors
     if resp.status_code >= 400:
         try:
+            error_json = resp.json()
             detail = (
-                resp.json().get("error_description")
-                or resp.json().get("msg")
+                error_json.get("error_description")
+                or error_json.get("msg")
                 or resp.text
             )
         except Exception:
             detail = resp.text
+
         raise HTTPException(status_code=resp.status_code, detail=detail)
-    
-    return resp.json()
+
+    # ✅ Handle empty response (like 204 logout)
+    if resp.status_code == 204 or not resp.content:
+        return {}
+
+    # ✅ Safe JSON parsing
+    try:
+        return resp.json()
+    except ValueError:
+        return {}
 
 
 @router.post("/signup")

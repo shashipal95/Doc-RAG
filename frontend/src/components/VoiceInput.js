@@ -2,60 +2,49 @@
 
 import { useState, useRef, useEffect } from "react";
 
-/**
- * Universal Voice Input Component
- * - Works in ALL browsers (Chrome, Firefox, Safari, Edge)
- * - Auto language detection (Hindi vs English)
- * - Auto-send option
- * - Real-time transcription display
- * - Fallback to backend transcription if Web Speech API unavailable
- */
 export function VoiceInput({
     onTranscript,
     onSpeechEnd,
     onError,
     autoSend = false,
-    showLanguage = true
+    showLanguage = false // Set to false since we removed the UI block
 }) {
     const [isListening, setIsListening] = useState(false);
-    const [transcript, setTranscript] = useState("");
-    const [detectedLanguage, setDetectedLanguage] = useState("");
     const [supportsWebSpeech, setSupportsWebSpeech] = useState(false);
+
     const recognitionRef = useRef(null);
     const mediaRecorderRef = useRef(null);
     const chunksRef = useRef([]);
     const silenceTimerRef = useRef(null);
 
-    // Check browser support on mount
+    // 🔥 FIX: Keep track of the absolute latest props so the mic never uses stale data
+    const propsRef = useRef({ onTranscript, onSpeechEnd, onError, autoSend });
+    useEffect(() => {
+        propsRef.current = { onTranscript, onSpeechEnd, onError, autoSend };
+    });
+
     useEffect(() => {
         if (typeof window !== "undefined") {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             setSupportsWebSpeech(!!SpeechRecognition);
-
             if (SpeechRecognition) {
                 setupWebSpeechAPI();
             }
         }
     }, []);
 
-    // Setup Web Speech API (Chrome, Edge, Safari)
     const setupWebSpeechAPI = () => {
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         const recognition = new SpeechRecognition();
 
-        // Configure for best results
-        recognition.continuous = true;
+        recognition.continuous = true; // ✅ Allows natural pauses
         recognition.interimResults = true;
         recognition.maxAlternatives = 1;
-
-        // Auto-detect language (works in Chrome)
         recognition.lang = navigator.language || "en-US";
 
         recognition.onstart = () => {
             console.log("Voice recognition started");
             setIsListening(true);
-            setTranscript("");
-            setDetectedLanguage("");
             if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
         };
 
@@ -72,50 +61,44 @@ export function VoiceInput({
                 }
             }
 
-            const currentTranscript = finalTranscript || interimTranscript;
-            setTranscript(currentTranscript);
-
             if (finalTranscript) {
                 const lang = detectLanguage(finalTranscript);
-                setDetectedLanguage(lang);
-                onTranscript(finalTranscript.trim(), lang);
+                // Use propsRef to avoid stale closures
+                if (propsRef.current.onTranscript) {
+                    propsRef.current.onTranscript(finalTranscript.trim(), lang);
+                }
             }
 
-            // ✅ ADD THIS NEW BLOCK: The Silence Detection Timer
-            // Clear the existing timer because you are still speaking
+            // ✅ Silence Detection Timer
             if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-
-            // Set a new timer. If 2000ms (2 seconds) passes without you speaking, stop the mic.
             silenceTimerRef.current = setTimeout(() => {
                 if (recognitionRef.current) {
-                    recognitionRef.current.stop(); // This triggers onend, which submits the message!
+                    recognitionRef.current.stop();
                 }
-            }, 2000); // <-- You can change this to 1500 for 1.5 seconds, etc.
+            }, 2000); // 2-second pause triggers submission
         };
 
         recognition.onerror = (event) => {
             console.error("Speech recognition error:", event.error);
             setIsListening(false);
 
+            const errCallback = propsRef.current.onError;
             if (event.error === 'not-allowed') {
-                onError?.("Microphone access denied. Please allow microphone access.");
+                errCallback?.("Microphone access denied. Please allow microphone access.");
             } else if (event.error === 'no-speech') {
-                onError?.("No speech detected. Please try again.");
+                errCallback?.("No speech detected. Please try again.");
             } else {
-                onError?.(event.error);
+                errCallback?.(event.error);
             }
         };
-
-        // Inside your VoiceInput component file:
 
         recognition.onend = () => {
             setIsListening(false);
             if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-            // We use setTimeout to ensure React state finishes updating first
+
             setTimeout(() => {
-                // Notice we removed "props." here!
-                if (onSpeechEnd) {
-                    onSpeechEnd();
+                if (propsRef.current.onSpeechEnd) {
+                    propsRef.current.onSpeechEnd();
                 }
             }, 100);
         };
@@ -123,34 +106,21 @@ export function VoiceInput({
         recognitionRef.current = recognition;
     };
 
-    // Language detection function
     const detectLanguage = (text) => {
-        // Check for Devanagari script (Hindi)
         const devanagariRegex = /[\u0900-\u097F]/;
-        if (devanagariRegex.test(text)) {
-            return "hi"; // Hindi
-        }
-
-        // Check for common Hindi words in Roman script
+        if (devanagariRegex.test(text)) return "hi";
         const hindiRomanWords = /\b(kya|hai|hoon|hain|ka|ki|ke|main|aap|tum|yeh|woh|kaise|kahan|kab|kyun)\b/i;
-        if (hindiRomanWords.test(text)) {
-            return "hi"; // Roman Hindi
-        }
-
-        // Default to English
+        if (hindiRomanWords.test(text)) return "hi";
         return "en";
     };
 
-    // Fallback: Use MediaRecorder + Backend Transcription (Firefox, older browsers)
     const startMediaRecorder = async () => {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             const mediaRecorder = new MediaRecorder(stream);
 
             mediaRecorder.ondataavailable = (event) => {
-                if (event.data.size > 0) {
-                    chunksRef.current.push(event.data);
-                }
+                if (event.data.size > 0) chunksRef.current.push(event.data);
             };
 
             mediaRecorder.onstop = async () => {
@@ -158,16 +128,14 @@ export function VoiceInput({
                 chunksRef.current = [];
 
                 try {
-                    // Send to backend for transcription
                     const result = await transcribeAudioBackend(audioBlob);
-
                     const lang = detectLanguage(result.transcript);
-                    setDetectedLanguage(lang);
-                    setTranscript(result.transcript);
 
-                    onTranscript(result.transcript, lang);
+                    if (propsRef.current.onTranscript) {
+                        propsRef.current.onTranscript(result.transcript, lang);
+                    }
 
-                    if (autoSend) {
+                    if (propsRef.current.autoSend) {
                         setTimeout(() => {
                             const event = new CustomEvent('voice-auto-send', {
                                 detail: { text: result.transcript, language: lang }
@@ -176,17 +144,15 @@ export function VoiceInput({
                         }, 300);
                     }
 
-                    // ✅ ADD THIS: Trigger submission after backend transcription finishes
-                    if (onSpeechEnd) {
-                        onSpeechEnd();
+                    if (propsRef.current.onSpeechEnd) {
+                        propsRef.current.onSpeechEnd();
                     }
 
                 } catch (error) {
                     console.error("Transcription error:", error);
-                    onError?.("Failed to transcribe audio. Please try again.");
+                    propsRef.current.onError?.("Failed to transcribe audio. Please try again.");
                 }
 
-                // Stop all tracks
                 stream.getTracks().forEach(track => track.stop());
                 setIsListening(false);
             };
@@ -194,16 +160,14 @@ export function VoiceInput({
             mediaRecorder.start();
             mediaRecorderRef.current = mediaRecorder;
             setIsListening(true);
-            setTranscript("🎤 Recording...");
 
         } catch (error) {
             console.error("Microphone error:", error);
-            onError?.("Could not access microphone. Please check permissions.");
+            propsRef.current.onError?.("Could not access microphone. Please check permissions.");
             setIsListening(false);
         }
     };
 
-    // Backend transcription API call
     const transcribeAudioBackend = async (audioBlob) => {
         const formData = new FormData();
         formData.append("audio", audioBlob, "recording.webm");
@@ -216,55 +180,40 @@ export function VoiceInput({
             },
         });
 
-        if (!response.ok) {
-            throw new Error("Transcription failed");
-        }
-
+        if (!response.ok) throw new Error("Transcription failed");
         return await response.json();
     };
 
-    // Start listening
     const startListening = () => {
         if (supportsWebSpeech && recognitionRef.current) {
-            // Use Web Speech API
             try {
                 recognitionRef.current.start();
             } catch (error) {
                 console.error("Failed to start recognition:", error);
-                // Fallback to MediaRecorder
                 startMediaRecorder();
             }
         } else {
-            // Use MediaRecorder + backend
             startMediaRecorder();
         }
     };
 
-    // Stop listening
     const stopListening = () => {
         if (recognitionRef.current && supportsWebSpeech) {
             recognitionRef.current.stop();
         }
-
         if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
             mediaRecorderRef.current.stop();
         }
-
         setIsListening(false);
     };
 
-    // Toggle listening
     const toggleListening = () => {
-        if (isListening) {
-            stopListening();
-        } else {
-            startListening();
-        }
+        if (isListening) stopListening();
+        else startListening();
     };
 
     return (
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            {/* Voice button */}
             <button
                 onClick={toggleListening}
                 type="button"
@@ -290,70 +239,21 @@ export function VoiceInput({
                 {isListening ? "🔴" : "🎤"}
             </button>
 
-            {/* Real-time transcript display */}
-            {/* {transcript && (
-                <div style={{
-                    padding: "6px 12px",
-                    borderRadius: 8,
-                    background: "rgba(124,58,237,0.1)",
-                    border: "1px solid rgba(124,58,237,0.3)",
-                    fontSize: 13,
-                    color: "#a78bfa",
-                    maxWidth: 300,
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                }}>
-                    {transcript}
-                </div>
-            )}
-            */}
-
-            {/* Language indicator */}
-            {showLanguage && detectedLanguage && (
-                <div style={{
-                    padding: "4px 8px",
-                    borderRadius: 6,
-                    background: detectedLanguage === "hi" ? "rgba(251,191,36,0.2)" : "rgba(59,130,246,0.2)",
-                    border: `1px solid ${detectedLanguage === "hi" ? "rgba(251,191,36,0.4)" : "rgba(59,130,246,0.4)"}`,
-                    fontSize: 11,
-                    fontWeight: 600,
-                    color: detectedLanguage === "hi" ? "#fbbf24" : "#60a5fa",
-                    textTransform: "uppercase",
-                }}>
-                    {detectedLanguage === "hi" ? "हिंदी" : "EN"}
-                </div>
-            )}
-
             <style jsx>{`
         @keyframes pulse {
-          0%, 100% { 
-            box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); 
-            transform: scale(1);
-          }
-          50% { 
-            box-shadow: 0 0 0 15px rgba(239, 68, 68, 0); 
-            transform: scale(1.05);
-          }
+          0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); transform: scale(1); }
+          50% { box-shadow: 0 0 0 15px rgba(239, 68, 68, 0); transform: scale(1.05); }
         }
       `}</style>
         </div>
     );
 }
 
-// Compact version (just the button)
-// Compact version (just the button)
-export function CompactVoiceInput({ onTranscript, onSpeechEnd, autoSend = false }) { // ✅ Add prop here
-    const [isListening, setIsListening] = useState(false);
-
-    const handleTranscript = (text, language) => {
-        onTranscript(text, language);
-    };
-
+export function CompactVoiceInput({ onTranscript, onSpeechEnd, autoSend = false }) {
     return (
         <VoiceInput
-            onTranscript={handleTranscript}
-            onSpeechEnd={onSpeechEnd} // ✅ Pass prop down
+            onTranscript={onTranscript}
+            onSpeechEnd={onSpeechEnd}
             autoSend={autoSend}
             showLanguage={false}
             onError={(err) => console.error(err)}
@@ -361,5 +261,4 @@ export function CompactVoiceInput({ onTranscript, onSpeechEnd, autoSend = false 
     );
 }
 
-// Export for use in chat
 export default VoiceInput;

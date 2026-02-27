@@ -1,6 +1,6 @@
 # 🚀 DocRAG – Enterprise RAG Application
 
-A full-stack, Enterprise-grade Retrieval-Augmented Generation (RAG) application with secure user authentication, designed for scalable document intelligence and production deployment built with:
+A full-stack, Enterprise-grade Multi-Model RAG System with secure user authentication, session management, retrive user conversion history and more. It can understand text , images, pdf; designed for scalable document intelligence and production deployment built with:
 
 - ⚡ Next.js (Frontend)
 - 🚀 FastAPI (Backend API)

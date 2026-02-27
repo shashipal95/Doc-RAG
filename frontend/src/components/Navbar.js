@@ -20,32 +20,49 @@ export default function Navbar() {
                 display: "flex", alignItems: "center", justifyContent: "space-between",
             }}>
 
-                {/* Logo */}
-                <Link href="/" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none" }}>
+                {/* Logo — all values hardcoded so no CSS variable can cause flicker */}
+                <Link
+                    href="/"
+                    style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 10,
+                        textDecoration: "none",
+                        color: "#e8e8f0",          /* ← prevents blue anchor flash */
+                        outline: "none",            /* ← prevents focus ring on logo */
+                    }}
+                >
                     <div style={{
                         width: 34, height: 34, borderRadius: 10,
                         background: "linear-gradient(135deg, #7c3aed, #4f46e5, #2563eb)",
                         display: "flex", alignItems: "center", justifyContent: "center",
-                        fontSize: 16, fontWeight: 700, color: "#fff",
+                        fontSize: 16, fontWeight: 700, color: "#ffffff",
                         boxShadow: "0 0 20px rgba(124,58,237,0.4)",
                         flexShrink: 0,
+                        border: "none",             /* ← prevents any inherited border */
+                        lineHeight: 1,
                     }}>✦</div>
                     <span style={{
-                        fontFamily: "'Roboto",
-                        fontWeight: 700, fontSize: 18,
-                        letterSpacing: "-0.02em", color: "#e8e8f0",
+                        fontFamily: "Roboto, sans-serif",   /* ← fixed broken quote nesting */
+                        fontWeight: 700,
+                        fontSize: 18,
+                        letterSpacing: "-0.02em",
+                        color: "#e8e8f0",           /* ← hardcoded, never flickers */
                     }}>DocsChat</span>
                 </Link>
 
                 {/* Actions */}
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <Link href="/login"
+                    <Link
+                        href="/login"
                         className="btn btn-ghost btn-sm"
                         style={{
-                            color: path === "/login" ? "#e8e8f0" : "rgba(232,232,240,0.5)",
+                            color: path === "/login" ? "#e8e8f0" : "rgba(232,232,240,0.55)",
                             background: path === "/login" ? "rgba(255,255,255,0.08)" : "transparent",
                             border: "none",
-                        }}>
+                            outline: "none",
+                        }}
+                    >
                         Login
                     </Link>
                     <Link href="/signup" className="btn btn-primary btn-sm">
