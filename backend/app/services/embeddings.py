@@ -19,9 +19,9 @@ from app.core.config import get_settings
 
 settings = get_settings()
 
-# ✅ gemini-embedding-001 works with v1beta (what google-genai SDK uses)
+# ✅ gemini-embedding-2-preview works with v1beta (what google-genai SDK uses)
 # ✅ 3072 dims — matches your existing Pinecone index, no recreation needed
-GEMINI_EMBED_MODEL = "gemini-embedding-001"
+GEMINI_EMBED_MODEL = "gemini-embedding-2-preview"
 
 _gemini_client = None
 _openai_client = None

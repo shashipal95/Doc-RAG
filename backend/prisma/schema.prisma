@@ -1,0 +1,91 @@
+// Prisma Schema for DocChat Application
+// File: backend/prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-py"
+  recursive_type_depth = 5
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User profiles with role-based access
+model Profile {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  role      String   @default("user") // 'user' or 'admin'
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  
+  // Relations
+  sessions  ChatSession[]
+  documents Document[]
+  
+  @@map("profiles")
+}
+
+// Chat sessions
+model ChatSession {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  title     String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  
+  // Relations
+  profile  Profile       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages ChatMessage[]
+  
+  @@index([userId])
+  @@map("chat_sessions")
+}
+
+// Chat messages (stores conversation history)
+model ChatMessage {
+  id        String   @id @default(uuid())
+  sessionId String   @map("session_id")
+  role      String   // 'user' or 'assistant'
+  content   String   @db.Text
+  imageUrl  String?  @map("image_url") // Optional image URL
+  language  String?  // 'hi' or 'en'
+  createdAt DateTime @default(now()) @map("created_at")
+  
+  // Relations
+  session ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  
+  @@index([sessionId])
+  @@index([createdAt])
+  @@map("chat_messages")
+}
+
+// Documents stored in Supabase Storage
+model Document {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  filename    String
+  fileSize    Int      @map("file_size")
+  mimeType    String   @map("mime_type")
+  storageUrl  String   @map("storage_url") // Supabase Storage URL
+  chunks      Int      @default(0) // Number of chunks in Pinecone
+  namespace   String   // Pinecone namespace (usually user_id)
+  createdAt   DateTime @default(now()) @map("created_at")
+  
+  // Relations
+  profile Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+  @@index([createdAt])
+  @@map("documents")
+}
+
+// System settings (optional)
+model Setting {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  value     String   @db.Text
+  updatedAt DateTime @updatedAt @map("updated_at")
+  
+  @@map("settings")
+}

@@ -38,4 +38,4 @@ langchain==1.2.10
 pytest==9.0.2
 
 
-duckduckgo-search
+duckduckgo-searchn
