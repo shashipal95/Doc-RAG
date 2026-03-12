@@ -5,7 +5,7 @@ Model compatibility matrix (google-genai SDK uses v1beta by default):
 ──────────────────────────────────────────────────────────────────────
 Model                  │ API ver │ Dims │ Free quota
 ───────────────────────┼─────────┼──────┼─────────────────────────
-gemini-embedding-001   │ v1beta  │ 3072 │ 1500 RPD free  ← USE THIS
+gemini-embedding-2-preview  │ v1beta  │ 3072 │ 1500 RPD free  ← USE THIS
 text-embedding-004     │ v1 only │ 768  │ breaks with google-genai SDK
 text-embedding-3-large │ OpenAI  │ 3072 │ paid only
 """

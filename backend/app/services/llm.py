@@ -28,8 +28,8 @@ from app.core.config import get_settings
 settings = get_settings()
 
 # ── Free-tier model names ──────────────────────────────────────────────────────
-GEMINI_TEXT_MODEL   = "gemini-embedding-2-preview"          # 15 RPM · 1 500 RPD free
-GEMINI_VISION_MODEL = "gemini-embedding-2-preview"           # same model, supports multimodal
+GEMINI_TEXT_MODEL   = "gemini-2.5-flash"          # 15 RPM · 1 500 RPD free
+GEMINI_VISION_MODEL = "gemini-2.5-flash"           # same model, supports multimodal
 GROQ_TEXT_MODEL     = "llama-3.3-70b-versatile"   # free, 6 000 tokens/min
 GROQ_VISION_MODEL   = "meta-llama/llama-4-scout-17b-16e-instruct"  # free vision on Groq
 
@@ -42,7 +42,10 @@ _openai_client = None
 def get_gemini_client():
     global _gemini_client
     if _gemini_client is None and settings.GEMINI_API_KEY:
-        _gemini_client = genai.Client(api_key=settings.GEMINI_API_KEY)
+        _gemini_client = genai.Client(
+            api_key=settings.GEMINI_API_KEY,
+            http_options={"api_version": "v1"},
+        )
     return _gemini_client
 
 
@@ -91,7 +94,7 @@ async def generate_vision_stream(
     Stream a vision response for an uploaded image.
 
     Groq   -> llama-4-scout (free, native vision via base64 URL)
-    Gemini -> gemini-embedding-2-preview (free tier, 15 RPM)
+    Gemini -> gemini-1.5-flash (free tier, 15 RPM)
     OpenAI -> gpt-4o  (paid)
     Ollama -> llava   (local/free)
     """
@@ -233,7 +236,7 @@ async def generate_stream(
 ) -> AsyncGenerator[str, None]:
     """Stream a text response from the selected LLM provider."""
 
-    # ── Gemini (FREE -- gemini-embedding-2-preview) ─────────────────────────────────────
+    # ── Gemini (FREE -- gemini-1.5-flash) ─────────────────────────────────────
     if provider == "gemini":
         client = get_gemini_client()
         if not client:
