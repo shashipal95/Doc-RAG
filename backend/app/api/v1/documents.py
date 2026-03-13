@@ -79,6 +79,19 @@ def _is_image_request(question: str) -> bool:
     return explicit_match or (has_image_word and has_action)
 
 
+def _is_transcript_request(question: str) -> bool:
+    """Detect when user is asking for transcript of their uploaded file."""
+    q = question.lower()
+    TRANSCRIPT_KEYWORDS = [
+        "transcript", "transcription", "transcribe",
+        "what does it say", "what was said", "what did it say",
+        "text of", "content of", "lyrics", "words in",
+        "what is in the audio", "what is in the video",
+        "read the audio", "read the file",
+    ]
+    return any(kw in q for kw in TRANSCRIPT_KEYWORDS)
+
+
 def _extract_image_search_query(question: str) -> str:
     stop_phrases = [
         "show me", "find", "get", "search for", "search", "display", "give me",
@@ -320,7 +333,7 @@ async def upload_file(
 
 @router.post("/query-image")
 async def query_with_image(
-    question: str = Form(...),
+    question: str = Form(""),
     provider: str = Form("gemini"),
     embedding_provider: str = Form("gemini"),
     session_id: Optional[str] = Form(None),
@@ -337,6 +350,7 @@ async def query_with_image(
         )
 
     image_bytes = await image.read()
+    question = question.strip() or "Describe this image in detail."
 
     try:
         query_embedding = get_embedding(question, embedding_provider)
@@ -437,78 +451,125 @@ async def query_documents(
 ):
     user_id = get_user_id(payload)
 
-    RELEVANCE_THRESHOLD = 0.50
+    # Cosine similarity threshold — raise to 0.75 to avoid weak doc matches
+    RELEVANCE_THRESHOLD = 0.75
 
     @traceable(run_type="chain", name="RAG Query Pipeline")
     def get_relevant_docs():
         query_embedding = get_embedding(request.question, request.embedding_provider)
-        matches = query_vectors(
-            query_vector=query_embedding,
-            namespace=user_id,
-            top_k=request.top_k
-        )
 
+        # If user is asking for a transcript, fetch ALL chunks for audio/video files
+        # regardless of semantic score — the question won't match song lyrics
+        if _is_transcript_request(request.question):
+            AUDIO_VIDEO_EXTS = (".mp3", ".wav", ".m4a", ".webm", ".mp4", ".ogg", ".flac", ".mpeg", ".mpga")
+            # Fetch more chunks and skip threshold for transcript requests
+            all_matches = query_vectors(
+                query_vector=query_embedding,
+                namespace=user_id,
+                top_k=20,  # grab lots — we want the full transcript
+            )
+            # Filter to audio/video files only
+            audio_matches = [
+                m for m in all_matches
+                if any(m.get("metadata", {}).get("filename", "").lower().endswith(ext) for ext in AUDIO_VIDEO_EXTS)
+            ]
+            if audio_matches:
+                print(f"[query] transcript request → returning {len(audio_matches)} audio chunks (no threshold)")
+                return audio_matches
+
+        matches = query_vectors(query_vector=query_embedding, namespace=user_id, top_k=request.top_k)
         relevant = [m for m in matches if m.get("score", 0) >= RELEVANCE_THRESHOLD]
         scores = [round(m.get("score", 0), 3) for m in matches]
-
         print(f"[query] scores={scores} → {len(relevant)} above threshold {RELEVANCE_THRESHOLD}")
-
         return relevant
 
     wants_images = _is_image_request(request.question)
 
     async def stream_generator():
         try:
+            # Always try web search first if Tavily key is set
             has_tavily = bool(settings.TAVILY_API_KEY)
+            is_transcript = _is_transcript_request(request.question)
 
-            # Step 1: retrieve docs
+            # Step 1: Check for relevant docs
             relevant_docs = get_relevant_docs()
             has_relevant_docs = len(relevant_docs) > 0
 
-            # Step 2: Decide source
-            if has_relevant_docs:
-                context_text = "\n\n".join(
-                    m["metadata"]["text"] for m in relevant_docs
-                )
-
+            # Step 2: Build prompt based on what we have
+            # For transcript requests with docs — skip Tavily entirely,
+            # web search will just return generic "how to transcribe" results
+            if is_transcript and has_relevant_docs:
+                context_text = "\n\n".join(m["metadata"]["text"] for m in relevant_docs)
                 prompt = (
-                    "Use the document context below to answer accurately.\n\n"
+                    f"The user uploaded an audio/video file which was transcribed and stored. "
+                    f"Below is the full transcript content from their file. "
+                    f"Present it clearly to the user.\n\n"
+                    f"Transcript:\n{context_text}\n\n"
+                    f"User request: {request.question}\n"
+                )
+                print(f"[query] → transcript only ({len(relevant_docs)} chunks, skipping web search)")
+
+            elif has_relevant_docs and not has_tavily:
+                # Only docs available
+                context_text = "\n\n".join(m["metadata"]["text"] for m in relevant_docs)
+                prompt = (
+                    f"Use the context below to answer accurately.\n\n"
                     f"Context:\n{context_text}\n\n"
                     f"Question: {request.question}\n"
                 )
-
                 print(f"[query] → doc context ({len(relevant_docs)} chunks)")
 
             elif has_tavily:
-                web_context = await asyncio.to_thread(
-                    _web_search_tavily,
-                    request.question
-                )
+                # Always use web search when Tavily is available
+                # Combine with docs if relevant
+                web_context = await asyncio.to_thread(_web_search_tavily, request.question)
 
-                if web_context:
+                if has_relevant_docs and web_context:
+                    # Best case: docs + web
+                    doc_text = "\n\n".join(m["metadata"]["text"] for m in relevant_docs)
                     prompt = (
-                        "Use the web search results below to give an accurate answer.\n\n"
+                        f"Answer using both the document context and web search results below.\n\n"
+                        f"Document Context:\n{doc_text}\n\n"
                         f"Web Search Results:\n{web_context}\n\n"
                         f"Question: {request.question}\n"
                     )
+                    print(f"[query] → docs + web search")
 
-                    print("[query] → web search")
-
-                else:
+                elif web_context:
+                    # Web only (docs not relevant)
                     prompt = (
-                        "Answer as accurately as possible.\n\n"
+                        f"Use the web search results below to give an accurate, up-to-date answer.\n\n"
+                        f"Web Search Results:\n{web_context}\n\n"
                         f"Question: {request.question}\n"
                     )
+                    print(f"[query] → web search only (docs not relevant)")
 
-                    print("[query] → general knowledge (web search failed)")
+                elif has_relevant_docs:
+                    # Tavily failed, fall back to docs
+                    doc_text = "\n\n".join(m["metadata"]["text"] for m in relevant_docs)
+                    prompt = (
+                        f"Use the context below to answer accurately.\n\n"
+                        f"Context:\n{doc_text}\n\n"
+                        f"Question: {request.question}\n"
+                    )
+                    print(f"[query] → doc context (web search failed)")
+
+                else:
+                    # Nothing worked — general knowledge
+                    prompt = (
+                        f"Answer as accurately as possible.\n\n"
+                        f"Question: {request.question}\n"
+                    )
+                    print(f"[query] → general knowledge (no docs, web search failed)")
 
             else:
+                # No Tavily key, no relevant docs — general knowledge
                 prompt = (
-                    "Answer as accurately as possible.\n\n"
+                    f"Answer as accurately as possible.\n\n"
                     f"Question: {request.question}\n"
                 )
+                print(f"[query] → general knowledge (no docs, no Tavily key)")
 
-                print("[query] → general knowledge (no docs, no web)")
             # Stream LLM response
             async for chunk in generate_stream(prompt, request.provider):
                 safe = chunk.replace("\n", "\\n")

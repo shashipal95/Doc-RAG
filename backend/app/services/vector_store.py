@@ -56,26 +56,31 @@ def upsert_vectors(
 def query_vectors(
     query_vector: List[float],
     namespace: str,
-    top_k: int = 3
+    top_k: int = 3,
+    filter: Dict = None,
 ) -> List[Dict]:
     """
     Query similar vectors from Pinecone
-    
+
     Args:
         query_vector: Query embedding vector
         namespace: User namespace to query
         top_k: Number of results to return
+        filter: Optional Pinecone metadata filter dict
         
     Returns:
         List of matching vectors with metadata
     """
-    results = index.query(
+    kwargs = dict(
         vector=query_vector,
         top_k=top_k,
         include_metadata=True,
         namespace=namespace,
     )
-    
+    if filter:
+        kwargs["filter"] = filter
+
+    results = index.query(**kwargs)
     return results.get("matches", [])
 
 

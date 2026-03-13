@@ -290,6 +290,9 @@ export default function ChatPage() {
   const [deletingDocs, setDeletingDocs] = useState(false);
   const [clearMsg, setClearMsg] = useState("");
   const [selectedImage, setSelectedImage] = useState(null);
+  const [selectedAudio, setSelectedAudio] = useState(null);
+  const [selectedVideo, setSelectedVideo] = useState(null);
+  const [selectedDoc, setSelectedDoc] = useState(null);
   const [histSearch, setHistSearch] = useState("");
   const [showAttach, setShowAttach] = useState(false);
 
@@ -321,7 +324,7 @@ export default function ChatPage() {
 
   useEffect(() => {
     const init = async () => {
-      await initializeSupabaseSession();
+      initializeSupabaseSession();
       const token = await getValidToken();
       if (!token) { router.push("/login"); return; }
       const stored = getCurrentUser();
@@ -352,13 +355,24 @@ export default function ChatPage() {
     setCurrentSession(sessionId);
     hasGreetedRef.current = true;
     const { data, error } = await supabase.from("chat_messages").select("*").eq("session_id", sessionId).order("created_at", { ascending: true });
+    if (error) { console.error("[history] failed to load messages:", error.message); return; }
+    if (data?.length === 0) { console.warn("[history] no messages found for session:", sessionId); }
     if (!error) setMessages(data.map(m => {
       const meta = m.metadata || {};
+      const att = meta.attachment || {};
       return {
         role: m.role,
         content: m.content,
-        imagePreview: meta.type === "image" ? meta.url : null,
-        images: Array.isArray(meta.images) ? meta.images : [],
+        // user-attached image (uploaded to Supabase storage)
+        imagePreview: (meta.type === "image" ? meta.url : null) || (att.type === "image" ? att.url : null),
+        // audio attachment
+        audioPreview: att.type === "audio" ? { name: att.name, url: att.url || null } : null,
+        // video attachment
+        videoPreview: att.type === "video" ? { name: att.name, url: att.url || null } : null,
+        // document attachment
+        docAttachment: att.type === "document" ? { name: att.name } : null,
+        // Pexels images in assistant messages
+        images: meta.images || [],
         streaming: false,
       };
     }));
@@ -385,13 +399,27 @@ export default function ChatPage() {
 
     if (isImage) { setSelectedImage({ file, previewUrl: URL.createObjectURL(file) }); return; }
 
-    if (isDoc) {
+    const AUDIO_VIDEO_EXTS = [".mp3", ".wav", ".m4a", ".ogg", ".flac", ".webm", ".mp4", ".mpeg", ".mpga"];
+    const isMedia = AUDIO_VIDEO_EXTS.some(ext => file.name.toLowerCase().endsWith(ext));
+
+    if (isDoc || isMedia) {
       setUploading(true);
-      setUploadMsg("Indexing…");
+      setUploadMsg(isMedia ? "Transcribing…" : "Indexing…");
       setDocStatus(null);
+
+      // Track attachment for history — set state before upload so it shows in the message
+      if (isMedia) {
+        const isVideo = [".mp4", ".webm"].some(ext => file.name.toLowerCase().endsWith(ext));
+        if (isVideo) setSelectedVideo({ name: file.name, previewUrl: null });
+        else setSelectedAudio({ name: file.name, previewUrl: null });
+      } else {
+        setSelectedDoc({ name: file.name });
+      }
+
       try {
         const form = new FormData();
         form.append("file", file);
+        form.append("provider", provider);
         form.append("embedding_provider", embeddingProvider);
         const res = await authFetch("/upload", { method: "POST", body: form });
         if (!res.ok) { const err = await res.json().catch(() => ({ detail: "Upload failed" })); throw new Error(err.detail); }
@@ -402,6 +430,9 @@ export default function ChatPage() {
       } catch (err) {
         setUploadMsg(`✗ ${err.message}`);
         setDocStatus("error");
+        // Clear on error
+        if (isMedia) { setSelectedAudio(null); setSelectedVideo(null); }
+        else setSelectedDoc(null);
       } finally {
         setUploading(false);
         setTimeout(() => setUploadMsg(""), 5000);
@@ -439,9 +470,23 @@ export default function ChatPage() {
     const img = latestImgRef.current;
     if ((!txt.trim() && !img) || loading) return;
     const question = txt.trim();
-    setInput(""); setSelectedImage(null);
+
+    // Capture attachment state BEFORE clearing — React batches setState so
+    // reading selectedAudio after setSelectedAudio(null) returns null immediately
+    const capturedAudio = selectedAudio;
+    const capturedVideo = selectedVideo;
+    const capturedDoc = selectedDoc;
+
+    setInput(""); setSelectedImage(null); setSelectedAudio(null); setSelectedVideo(null); setSelectedDoc(null);
     setTimeout(resizeTA, 0);
-    setMessages(prev => [...prev, { role: "user", content: question, imagePreview: img?.previewUrl ?? null }]);
+    setMessages(prev => [...prev, {
+      role: "user",
+      content: question,
+      imagePreview: img?.previewUrl ?? null,
+      audioPreview: capturedAudio ? { name: capturedAudio.name, url: capturedAudio.previewUrl } : null,
+      videoPreview: capturedVideo ? { name: capturedVideo.name, url: capturedVideo.previewUrl } : null,
+      docAttachment: capturedDoc ? { name: capturedDoc.name } : null,
+    }]);
     setLoading(true);
     let activeSess = currentSession;
 
@@ -469,8 +514,19 @@ export default function ChatPage() {
       } catch { }
     }
 
-    const { error: userMsgErr } = await supabase.from("chat_messages").insert([{ session_id: activeSess, role: "user", content: question, metadata: uploadedUrl ? { type: "image", url: uploadedUrl } : {} }]);
-    if (userMsgErr) console.error("❌ Save user message failed:", userMsgErr.message);
+    // Build attachment metadata for history (use captured values — state already cleared)
+    let attachmentMeta = {};
+    if (img && uploadedUrl) {
+      attachmentMeta = { attachment: { type: "image", url: uploadedUrl, name: img.file.name } };
+    } else if (capturedAudio) {
+      attachmentMeta = { attachment: { type: "audio", name: capturedAudio.name, url: null } };
+    } else if (capturedVideo) {
+      attachmentMeta = { attachment: { type: "video", name: capturedVideo.name, url: null } };
+    } else if (capturedDoc) {
+      attachmentMeta = { attachment: { type: "document", name: capturedDoc.name } };
+    }
+    const { error: userInsertErr } = await supabase.from("chat_messages").insert([{ session_id: activeSess, role: "user", content: question, metadata: attachmentMeta }]);
+    if (userInsertErr) console.error("[history] failed to save user message:", userInsertErr.message);
     setMessages(prev => [...prev, { role: "assistant", content: "", images: [], streaming: true }]);
 
     let full = "", imgs = [];
@@ -514,8 +570,8 @@ export default function ChatPage() {
 
     const final = (full || "No response.").replace(/^\n+/, "");
     setMessages(prev => { const u = [...prev]; u[u.length - 1] = { role: "assistant", content: final, images: imgs, streaming: false }; return u; });
-    const { error: aiMsgErr } = await supabase.from("chat_messages").insert([{ session_id: activeSess, role: "assistant", content: final, metadata: { images: imgs } }]);
-    if (aiMsgErr) console.error("❌ Save assistant message failed:", aiMsgErr.message);
+    const { error: asstInsertErr } = await supabase.from("chat_messages").insert([{ session_id: activeSess, role: "assistant", content: final, metadata: { images: imgs } }]);
+    if (asstInsertErr) console.error("[history] failed to save assistant message:", asstInsertErr.message);
     setLoading(false);
   };
 
@@ -528,7 +584,7 @@ export default function ChatPage() {
 
   return (
     <div style={{ display: "flex", height: "100vh", overflow: "hidden", background: th.app, fontFamily: "var(--font-body)" }}>
-      <input ref={fileInputRef} type="file" accept="image/*,.pdf,.docx,.txt" style={{ display: "none" }} onChange={handleFile} />
+      <input ref={fileInputRef} type="file" accept="image/*,.pdf,.docx,.txt,.mp3,.wav,.m4a,.ogg,.flac,.webm,.mp4,.mpeg" style={{ display: "none" }} onChange={handleFile} />
       <audio ref={audioRef} src="https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3" />
 
       <style>{`
@@ -703,6 +759,28 @@ export default function ChatPage() {
                       <p style={{ fontSize: 10, marginTop: 4, opacity: .65 }}>🖼 Image attached</p>
                     </div>
                   )}
+                  {msg.audioPreview && (
+                    <div style={{ marginBottom: 8 }}>
+                      <p style={{ fontSize: 11, opacity: .65, marginBottom: 4 }}>🎵 {msg.audioPreview.name}</p>
+                      {msg.audioPreview.url
+                        ? <audio controls src={msg.audioPreview.url} style={{ width: "100%", maxWidth: 260, borderRadius: 8 }} />
+                        : <div style={{ fontSize: 11, opacity: .5, fontStyle: "italic" }}>Audio transcribed & indexed</div>}
+                    </div>
+                  )}
+                  {msg.videoPreview && (
+                    <div style={{ marginBottom: 8 }}>
+                      <p style={{ fontSize: 11, opacity: .65, marginBottom: 4 }}>🎬 {msg.videoPreview.name}</p>
+                      {msg.videoPreview.url
+                        ? <video controls src={msg.videoPreview.url} style={{ maxWidth: 260, borderRadius: 8 }} />
+                        : <div style={{ fontSize: 11, opacity: .5, fontStyle: "italic" }}>Video transcribed & indexed</div>}
+                    </div>
+                  )}
+                  {msg.docAttachment && (
+                    <div style={{ marginBottom: 8, display: "flex", alignItems: "center", gap: 6, padding: "6px 10px", borderRadius: 8, background: "rgba(232,168,48,.10)" }}>
+                      <span style={{ fontSize: 16 }}>📄</span>
+                      <span style={{ fontSize: 11, opacity: .8 }}>{msg.docAttachment.name}</span>
+                    </div>
+                  )}
                   {msg.streaming && !msg.content ? (
                     <span style={{ display: "flex", gap: 4, alignItems: "center", height: 18 }}>
                       {[0, 1, 2].map(j => <span key={j} style={{ width: 6, height: 6, borderRadius: "50%", background: th.dot, animation: "bounce 1.2s ease-in-out infinite", animationDelay: `${j * .18}s`, display: "inline-block" }} />)}
@@ -759,8 +837,9 @@ export default function ChatPage() {
                   <div style={{ position: "absolute", bottom: "calc(100% + 8px)", left: 0, background: th.isDark ? "#1B1910" : "#FFFFFF", border: `1px solid ${th.bdr2}`, borderRadius: 12, overflow: "hidden", minWidth: 212, boxShadow: "0 14px 40px rgba(0,0,0,.35)", zIndex: 200 }}>
                     <div style={{ padding: "9px 13px 4px", fontSize: 9.5, color: th.faint, fontFamily: "var(--font-mono)", letterSpacing: ".09em", textTransform: "uppercase" }}>Attach file</div>
                     {[
-                      { icon: "📄", title: "PDF / DOCX / TXT", accept: ".pdf,.docx,.txt" },
+                      { icon: "📄", title: "PDF / DOCX / TXT", sub: "Index & search", accept: ".pdf,.docx,.txt" },
                       { icon: "🖼️", title: "Image", sub: "Vision Q&A", accept: "image/*" },
+                      { icon: "🎵", title: "Audio / Video", sub: "MP3, WAV, M4A, MP4 · Whisper", accept: ".mp3,.wav,.m4a,.ogg,.flac,.webm,.mp4,.mpeg,.mpga" },
                     ].map(opt => (
                       <button key={opt.title} onClick={() => { setShowAttach(false); if (fileInputRef.current) { fileInputRef.current.accept = opt.accept; fileInputRef.current.click(); } }} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: "transparent", border: "none", borderTop: `1px solid ${th.bdr}`, cursor: "pointer", textAlign: "left", transition: "background .12s" }}
                         onMouseEnter={e => e.currentTarget.style.background = "rgba(232,168,48,.06)"}
